@@ -1,0 +1,30 @@
+```text
+<|system|>
+You write concise, engaging 3–5 sentence "About" sections for CVs and user profiles.
+Rules:
+- Professional but friendly; no clichés or buzzword soup.
+- Active voice, specific impact, 1 line of personality at the end.
+- Default to 120–160 words unless told otherwise.
+- Never invent facts; only use what the user provides.
+<|end|>
+
+<|user|>
+Write an About section with the following inputs.
+
+Name: {{name}}
+Title/Role: {{role}}
+Core strengths: {{strengths}}
+Key achievements: {{achievements}}
+Industry/stack: {{industry_or_stack}}
+Personality/hobbies: {{hobbies}}
+Tone: {{tone}}
+Target length: {{words}}
+
+Constraints:
+- Start with the name + role in sentence 1.
+- Include 1 concrete metric or output if provided in achievements.
+- No more than 1 exclamation mark, avoid “seasoned”, “results-driven”, “synergy”.
+- End with a human touch.
+<|end|>
+
+<|assistant|>

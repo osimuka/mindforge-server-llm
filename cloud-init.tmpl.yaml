@@ -1,0 +1,56 @@
+#cloud-config
+package_update: true
+packages:
+  - docker.io
+  - curl
+  - git
+
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": { "max-size": "10m", "max-file": "3" }
+      }
+    permissions: "0644"
+
+runcmd:
+  # Enable docker and add default user to docker group
+  - [bash, -lc, "systemctl enable --now docker"]
+  - [bash, -lc, "usermod -aG docker $SUDO_USER || true"]
+
+  # Add a small swapfile for safety on 4 GB boxes
+  - [
+      bash,
+      -lc,
+      "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && grep -q '/swapfile' /etc/fstab || echo '/swapfile swap swap defaults 0 0' >> /etc/fstab",
+    ]
+
+  # Fetch repo
+  - [
+      bash,
+      -lc,
+      "mkdir -p /opt && cd /opt && ( [ -d mindforge-server-llm ] || git clone __REPO_URL__ mindforge-server-llm )",
+    ]
+
+  # Build image with the chosen model (downloaded at build time)
+  - [
+      bash,
+      -lc,
+      "cd /opt/mindforge-server-llm && docker build --build-arg MODEL_FILE=__MODEL_FILE__ --build-arg MODEL_URL=__MODEL_URL__ -t mindforge-server-llm:cpu .",
+    ]
+
+  # Run the server
+  - [bash, -lc, "docker rm -f mindforge-server-llm || true"]
+  - [
+      bash,
+      -lc,
+      "docker run -d --name mindforge-server-llm -p 8080:8080 -e CTX=2048 -e N_THREADS=0 -e N_BATCH=256 -e N_PARALLEL=1 --restart unless-stopped mindforge-server-llm:cpu",
+    ]
+
+  # Friendly hint in the console
+  - [
+      bash,
+      -lc,
+      "echo 'LLM server starting on port 8080. Try: curl http://$(curl -s ifconfig.me):8080/v1/chat/completions'",
+    ]
