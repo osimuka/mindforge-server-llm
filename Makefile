@@ -5,11 +5,13 @@ REPO_URL   ?= https://github.com/osimuka/mindforge-server-llm.git
 
 IMAGE_NAME ?= mindforge-server-llm:cpu
 CONT_NAME  ?= mindforge-server-llm
-PORT       ?= 8080
+LLAMA_PORT ?= 8080
+API_PORT   ?= 3000
 CTX        ?= 2048
 N_THREADS  ?= 0
 N_BATCH    ?= 256
 N_PARALLEL ?= 1
+PROMPTS_DIR ?= ./prompts
 
 # ---- Local build & run ----
 .PHONY: build run stop logs clean
@@ -23,8 +25,10 @@ build:
 run: build
 	docker rm -f $(CONT_NAME) 2>/dev/null || true
 	docker run -d --name $(CONT_NAME) \
-	  -p $(PORT):$(PORT) \
-	  -e PORT=$(PORT) \
+	  -p $(LLAMA_PORT):8080 \
+	  -p $(API_PORT):3000 \
+	  -v $(PROMPTS_DIR):/prompts \
+	  -e PORT=$(API_PORT) \
 	  -e CTX=$(CTX) \
 	  -e N_THREADS=$(N_THREADS) \
 	  -e N_BATCH=$(N_BATCH) \
@@ -49,9 +53,13 @@ cloud-init:
 	@echo "  REPO_URL=$(REPO_URL)"
 	@echo "  MODEL_FILE=$(MODEL_FILE)"
 	@echo "  MODEL_URL=$(MODEL_URL)"
+	@echo "  API_PORT=$(API_PORT)"
+	@echo "  LLAMA_PORT=$(LLAMA_PORT)"
 	sed -e 's|__REPO_URL__|$(REPO_URL)|g' \
 	    -e 's|__MODEL_FILE__|$(MODEL_FILE)|g' \
 	    -e 's|__MODEL_URL__|$(MODEL_URL)|g' \
+	    -e 's|__API_PORT__|$(API_PORT)|g' \
+	    -e 's|__LLAMA_PORT__|$(LLAMA_PORT)|g' \
 	    cloud-init.tmpl.yaml > cloud-init.yaml
 	@echo "Wrote cloud-init.yaml"
 

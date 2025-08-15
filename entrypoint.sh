@@ -14,29 +14,26 @@ fi
 
 echo "Starting llama server with absolute path..."
 
-# Use the absolute path to the server executable 
+# Start the llama server in the background
 if [ -x /app/llama-server ]; then
-  exec /app/llama-server \
+  /app/llama-server \
     -m "$MODEL_PATH" \
     -c "$CTX" \
     -b "$N_BATCH" \
     -t "$N_THREADS" \
     --parallel "$N_PARALLEL" \
     --host 0.0.0.0 \
-    --port "$PORT"
+    --port 8080 &
 else
   echo "ERROR: Cannot find llama server executable at /app/llama-server"
   echo "Looking for server executables anywhere on the system:"
   find / -name "*server*" -type f -executable 2>/dev/null || echo "No server executables found"
   exit 1
 fi
-curl http://localhost:8080/v1/chat/completions \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "phi3",
-    "messages": [
-      {"role": "user", "content": "Hello, how are you today?"}
-    ],
-    "temperature": 0.7,
-    "max_tokens": 100
-  }'
+
+# Wait for llama server to start
+sleep 5
+
+# Start the FastAPI service
+echo "Starting FastAPI service..."
+exec python3 /app/server.py

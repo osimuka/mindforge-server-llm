@@ -1,4 +1,13 @@
-FROM --platform=linux/arm64 ghcr.io/ggerganov/llama.cpp:full
+FROM --platform=linux/arm64 ghcr.io/ggerganov/llama.cpp:full AS base
+
+# Install Python and dependencies
+RUN apt-get update && \
+    apt-get install -y python3 python3-pip curl && \
+    rm -rf /var/lib/apt/lists/*
+
+# Copy and install Python requirements
+COPY requirements.txt /app/requirements.txt
+RUN pip3 install -r /app/requirements.txt
 
 # Default model settings (override with build args)
 ARG MODEL_FILE=model.gguf
@@ -21,8 +30,16 @@ RUN mkdir -p /models && \
     echo "No MODEL_URL provided — mount your model.gguf at /models"; \
     fi
 
-# Entrypoint setup
-EXPOSE 8080
-COPY entrypoint.sh /entrypoint.sh
-RUN chmod +x /entrypoint.sh
-ENTRYPOINT ["/entrypoint.sh"]
+# Copy application files
+COPY server.py /app/server.py
+COPY entrypoint.sh /app/entrypoint.sh
+COPY ./prompts /prompts
+
+# Setup permissions and working directory
+RUN chmod +x /app/entrypoint.sh
+WORKDIR /app
+
+# Expose port for both llama server and FastAPI
+EXPOSE 8080 3000
+
+ENTRYPOINT ["/app/entrypoint.sh"]
