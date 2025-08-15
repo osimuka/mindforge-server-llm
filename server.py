@@ -1,9 +1,9 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import os
-import subprocess
 import json
 from typing import List, Optional
+import httpx
 
 app = FastAPI()
 
@@ -30,33 +30,33 @@ async def generate(request: ChatRequest, prompt: Optional[str] = None):
         system_prompt = ""
         if prompt:
             system_prompt = read_prompt_file(prompt)
-        
-        # Prepare messages including system prompt if provided
-        messages = request.messages
-        if system_prompt:
-            messages.insert(0, Message(role="system", content=system_prompt))
 
-        # Prepare the curl command to llama server
-        cmd = [
-            "curl", 
-            "http://localhost:8080/v1/chat/completions",
-            "-H", "Content-Type: application/json",
-            "-d", json.dumps({
-                "model": request.model,
-                "messages": [{"role": m.role, "content": m.content} for m in messages],
-                "temperature": request.temperature,
-                "max_tokens": request.max_tokens
-            })
-        ]
-        
-        # Execute the command
-        result = subprocess.run(cmd, capture_output=True, text=True)
-        
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"Llama server error: {result.stderr}")
-            
-        return json.loads(result.stdout)
-        
+        # Prepare messages including system prompt if provided
+        messages = [ {"role": m.role, "content": m.content} for m in request.messages ]
+        if system_prompt:
+            messages.insert(0, {"role":"system", "content": system_prompt})
+
+        payload = {
+            "model": request.model,
+            "messages": messages,
+            "temperature": request.temperature,
+            "max_tokens": request.max_tokens
+        }
+
+        headers = {"Content-Type": "application/json"}
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("http://localhost:8080/v1/chat/completions",
+                                      json=payload,
+                                      headers=headers,
+                                      timeout=60.0)
+            resp.raise_for_status()
+            return resp.json()
+
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=502, detail=f"Upstream request error: {str(e)}")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=500, detail=f"Upstream server error: {str(e)}")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
