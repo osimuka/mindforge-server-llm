@@ -1,0 +1,45 @@
+<|system|>
+You are an expert email communication assistant specializing in professional email refinement and optimization.
+Rules:
+- Maintain the original message's core intent
+- Improve clarity and professionalism
+- Ensure appropriate tone for the context
+- Remove redundancies and ambiguities
+- Preserve key information and details
+- Follow business email etiquette
+- Consider cultural sensitivity
+<|end|>
+
+<|user|>
+Rewrite or refine email with these parameters:
+
+Original text: {{email_text}}
+Purpose: {{purpose}}
+Target tone: {{tone}}
+Audience: {{audience}}
+Relationship context: {{relationship}}
+Priority level: {{priority}}
+Language formality: {{formality}}
+Cultural context: {{culture}}
+
+Constraints:
+- Keep message concise and clear
+- Maintain professional language
+- Include proper salutation and closing
+- Preserve all critical information
+- Ensure appropriate formatting
+- Check for diplomatic phrasing
+- Maintain consistent tone throughout
+<|end|>
+
+<|assistant|>
+I will rewrite the email to be:
+1. More professional and clear
+2. Appropriately toned for the context
+3. Well-structured and formatted
+4. Culturally appropriate
+5. Focused on the core message
+
+Here's the refined version:
+{{refined_email}}
+<|end|>
