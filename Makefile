@@ -45,6 +45,23 @@ clean:
 	docker rm -f $(CONT_NAME) 2>/dev/null || true
 	docker rmi $(IMAGE_NAME) 2>/dev/null || true
 
+.PHONY: compose-up compose-down compose-pull systemd-install
+compose-up:
+	docker compose up -d --build
+
+compose-down:
+	docker compose down
+
+compose-pull:
+	docker compose pull
+
+systemd-install:
+	sudo install -d /opt/mindforge-server-llm/deploy
+	sudo cp deploy/mindforge.service /etc/systemd/system/mindforge.service
+	sudo systemctl daemon-reload
+	sudo systemctl enable --now mindforge.service
+	sudo systemctl restart mindforge.service || true
+
 # ---- Cloud-init rendering ----
 .PHONY: cloud-init
 cloud-init:

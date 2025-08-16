@@ -1,0 +1,22 @@
+# JSON + jq (recommended)
+doctl compute droplet list --output json | jq -r '.[] | select(.name=="llm-4gb") | .id'
+
+# or a simpler pipeline (no jq)
+doctl compute droplet list --format ID,Name,PublicIPv4 --no-header | grep 'llm-4gb' | awk '{print $1}'
+
+doctl compute floating-ip create --droplet-id $(doctl compute droplet get llm-4gb --format ID --no-header)
+
+FLOAT_IP=$(doctl compute floating-ip create --droplet-id $(doctl compute droplet get llm-4gb --format ID --no-header) --format IP --no-header)
+echo $FLOAT_IP
+
+
+How to install on the droplet
+
+Copy the repository to /opt/mindforge-server-llm on the droplet (or git clone there).
+Run:
+
+cd /opt/mindforge-server-llm
+sudo make systemd-install
+# check status
+sudo systemctl status mindforge.service
+sudo journalctl -u mindforge.service -f

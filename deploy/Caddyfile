@@ -1,0 +1,13 @@
+inference.4onstudios.com {
+    reverse_proxy app:3000 {
+        transport http {
+            read_buffer 0
+            write_buffer 0
+        }
+    }
+    encode gzip zstd
+    log {
+        output file /var/log/caddy/access.log
+        format single_field common_log
+    }
+}

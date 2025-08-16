@@ -7,6 +7,7 @@ import httpx
 
 app = FastAPI()
 
+
 class Message(BaseModel):
     role: str
     content: str
@@ -23,6 +24,23 @@ def read_prompt_file(prompt_name: str) -> str:
         raise HTTPException(status_code=404, detail=f"Prompt template {prompt_name} not found")
     with open(prompt_path, 'r') as f:
         return f.read()
+
+
+@app.get("/")
+async def root():
+    return {"status": "ok"}
+
+@app.get("/healthz")
+async def healthz():
+    # quick upstream check to see if LLM server is reachable
+    try:
+        async with httpx.AsyncClient() as client:
+            r = await client.get("http://127.0.0.1:8080/", timeout=5.0)
+            if r.status_code < 500:
+                return {"status": "ok", "upstream": True}
+    except Exception:
+        return {"status": "degraded", "upstream": False}
+    return {"status": "degraded", "upstream": False}
 
 @app.post("/v1/chat/completions")
 async def generate(request: ChatRequest, prompt: Optional[str] = None):
