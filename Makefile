@@ -47,13 +47,13 @@ clean:
 
 .PHONY: compose-up compose-down compose-pull systemd-install
 compose-up:
-	docker compose up -d --build
+    docker compose up --detach --build --remove-orphans
 
 compose-down:
-	docker compose down
+    docker compose down --remove-orphans
 
 compose-pull:
-	docker compose pull
+    docker compose pull
 
 systemd-install:
 	sudo install -d /opt/mindforge-server-llm/deploy

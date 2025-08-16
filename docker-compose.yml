@@ -2,40 +2,37 @@ version: "3.8"
 
 services:
   app:
+    container_name: mindforge-server-llm_app
     image: ${IMAGE_NAME:-mindforge-server-llm:cpu}
     build:
       context: .
-      args:
-        MODEL_FILE: ${MODEL_FILE:-Phi-3-mini-4k-instruct-Q4_K_S.gguf}
-        MODEL_URL: ${MODEL_URL:-https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/${MODEL_FILE}}
     volumes:
       - ./prompts:/prompts:ro
     environment:
-      - PORT=3000
-      - CTX=${CTX:-2048}
-      - N_THREADS=${N_THREADS:-0}
-      - N_BATCH=${N_BATCH:-256}
       - N_PARALLEL=${N_PARALLEL:-1}
+      - PORT=3000
     networks:
       - llm-net
     expose:
       - "3000"
-      - "8080"
+    restart: unless-stopped
 
   caddy:
+    container_name: mindforge-server-llm_caddy
     image: caddy:2
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - /var/log/caddy:/var/log/caddy
       - caddy_data:/data
       - caddy_config:/config
-      - /var/log/caddy:/var/log/caddy
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       - app
     networks:
       - llm-net
+    restart: unless-stopped
 
 networks:
   llm-net:

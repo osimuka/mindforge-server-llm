@@ -28,9 +28,10 @@ PROMPTS_DIR=${PROMPTS_DIR:-./prompts}
 REMOTE_HOST=""
 SSH_USER="ubuntu"
 SSH_KEY=""
-REGISTRY_IMAGE=""   # if set, build locally, tag to this, push and remote will docker pull
 BUILD_LOCAL=false
 HELP=false
+GIT_TOKEN=""
+COMPOSE_REMOTE=false
 
 print_help(){
 	cat <<EOF
@@ -39,7 +40,6 @@ Usage: $0 [options]
 Options:
 	--host user@host   Deploy to remote host (ssh). If omitted and --local not set, script will require --host.
 	--ssh-key PATH     SSH private key for remote access (optional).
-	--registry IMAGE   Tag & push local image to registry (eg ghcr.io/you/repo:tag). Remote will pull this image.
 	--local            Build and restart on local machine instead of remote.
 	--help             Show this help.
 
@@ -57,9 +57,13 @@ while [[ $# -gt 0 ]]; do
 		--ssh-key)
 			SSH_KEY="$2"; shift 2;;
 		--registry)
-			REGISTRY_IMAGE="$2"; shift 2;;
+				echo "Registry/push workflow removed: this repo is public and we build locally or remotely. Ignore --registry."; shift 1;;
 		--local)
 			BUILD_LOCAL=true; shift 1;;
+		--git-token)
+			GIT_TOKEN="$2"; shift 2;;
+		--compose)
+			COMPOSE_REMOTE=true; shift 1;;
 		--help|-h)
 			print_help; exit 0;;
 		*)
@@ -89,21 +93,30 @@ run_remote_build_and_restart(){
 	ssh_cmd "$host" "sleep 2 && docker ps --filter name=${CONT_NAME} --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 }
 
-run_remote_pull_and_restart(){
+run_remote_compose_and_restart(){
 	local host="$1"
-	echo "[remote] Pulling image ${REGISTRY_IMAGE} on ${host} and restarting"
-	ssh_cmd "$host" "docker pull ${REGISTRY_IMAGE} && docker rm -f ${CONT_NAME} 2>/dev/null || true && docker run -d --name ${CONT_NAME} -p 127.0.0.1:${LLAMA_PORT}:8080 -p 127.0.0.1:${API_PORT}:3000 -v /opt/mindforge-server-llm/prompts:/prompts -e PORT=${API_PORT} -e CTX=${CTX} -e N_THREADS=${N_THREADS} -e N_BATCH=${N_BATCH} -e N_PARALLEL=${N_PARALLEL} --restart unless-stopped ${REGISTRY_IMAGE}"
-	ssh_cmd "$host" "sleep 2 && docker ps --filter name=${CONT_NAME} --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
+	echo "[remote] Deploying via docker compose on ${host}"
+	if [[ -n "${GIT_TOKEN}" ]]; then
+		# use token for cloning private repo
+		AUTH_URL=$(echo "${REPO_URL}" | sed -E "s#https://#https://${GIT_TOKEN}@#")
+		ssh_cmd "$host" "mkdir -p /opt && cd /opt && if [ -d mindforge-server-llm ]; then cd mindforge-server-llm && git fetch --all && git reset --hard origin/main || true; else git clone ${AUTH_URL} mindforge-server-llm; fi"
+	else
+		ssh_cmd "$host" "mkdir -p /opt && cd /opt && if [ -d mindforge-server-llm ]; then cd mindforge-server-llm && git fetch --all && git reset --hard origin/main || true; else git clone ${REPO_URL} mindforge-server-llm; fi"
+	fi
+
+	ssh_cmd "$host" "cd /opt/mindforge-server-llm && docker compose up -d --build"
+	echo "[remote] Waiting briefly and checking containers..."
+	ssh_cmd "$host" "sleep 2 && docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'"
 }
+
+# registry/push workflow removed — builds are local or remote
 
 run_local_build_and_restart(){
 	echo "[local] Building image ${IMAGE_NAME} locally"
 	docker build --build-arg MODEL_FILE="${MODEL_FILE}" --build-arg MODEL_URL="${MODEL_URL}" -t "${IMAGE_NAME}" .
 
 	if [[ -n "${REGISTRY_IMAGE}" ]]; then
-		echo "[local] Tagging and pushing to ${REGISTRY_IMAGE}"
-		docker tag "${IMAGE_NAME}" "${REGISTRY_IMAGE}"
-		docker push "${REGISTRY_IMAGE}"
+		echo "--registry ignored: building local image only"
 	fi
 
 	echo "[local] Restarting container ${CONT_NAME}"
@@ -130,32 +143,18 @@ if [[ "$BUILD_LOCAL" = true && -z "$REMOTE_HOST" ]]; then
 	exit 0
 fi
 
-if [[ "$BUILD_LOCAL" = true && -n "$REMOTE_HOST" ]]; then
-	# build locally then push to registry image, require REGISTRY_IMAGE
-	if [[ -z "${REGISTRY_IMAGE}" ]]; then
-		echo "Error: --registry IMAGE is required when using --local build with --host"; exit 1
-	fi
-	echo "Building locally and pushing ${REGISTRY_IMAGE}"
-	docker build --build-arg MODEL_FILE="${MODEL_FILE}" --build-arg MODEL_URL="${MODEL_URL}" -t "${IMAGE_NAME}" .
-	docker tag "${IMAGE_NAME}" "${REGISTRY_IMAGE}"
-	docker push "${REGISTRY_IMAGE}"
-	run_remote_pull_and_restart "$REMOTE_HOST"
-	health_check_remote "$REMOTE_HOST"
-	exit 0
-fi
+
 
 if [[ -n "$REMOTE_HOST" ]]; then
-	# remote build (no registry)
-	if [[ -n "${REGISTRY_IMAGE}" ]]; then
-		# if registry provided but not building locally, remote will pull provided image
-		run_remote_pull_and_restart "$REMOTE_HOST"
-		health_check_remote "$REMOTE_HOST"
-		exit 0
-	else
-		run_remote_build_and_restart "$REMOTE_HOST"
+	# remote build (no registry) or remote compose
+	if [[ "$COMPOSE_REMOTE" = true ]]; then
+		run_remote_compose_and_restart "$REMOTE_HOST"
 		health_check_remote "$REMOTE_HOST"
 		exit 0
 	fi
+	run_remote_build_and_restart "$REMOTE_HOST"
+	health_check_remote "$REMOTE_HOST"
+	exit 0
 fi
 
 echo "No action taken. Use --host user@host or --local. Use --help for usage."
