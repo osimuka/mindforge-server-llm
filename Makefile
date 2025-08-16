@@ -17,7 +17,6 @@ PROMPTS_DIR ?= ./prompts
 .PHONY: build run stop logs clean
 build:
 	docker build \
-	  --platform linux/arm64 \
 	  --build-arg MODEL_FILE=$(MODEL_FILE) \
 	  --build-arg MODEL_URL=$(MODEL_URL) \
 	  -t $(IMAGE_NAME) .
@@ -80,4 +79,4 @@ endif
 	  --region $(REGION) --size $(SIZE) --image ubuntu-22-04-x64 \
 	  --user-data-file cloud-init.yaml --tag-names llm \
 	  --ssh-keys $(SSH_KEY) --wait
-	@echo "Droplet $(NAME) requested. Open port $(PORT) in your DO firewall if needed."
+	@echo "Droplet $(NAME) requested. Open ports $(API_PORT) (API) and $(LLAMA_PORT) (LLM) in your DO firewall if needed."

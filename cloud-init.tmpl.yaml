@@ -4,6 +4,7 @@ packages:
   - docker.io
   - curl
   - git
+  - ufw
 
 write_files:
   - path: /etc/docker/daemon.json
@@ -26,6 +27,14 @@ runcmd:
       "fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && grep -q '/swapfile' /etc/fstab || echo '/swapfile swap swap defaults 0 0' >> /etc/fstab",
     ]
 
+  # Configure a simple firewall so ports are reachable but system remains secure
+  - [bash, -lc, "ufw default deny incoming || true"]
+  - [bash, -lc, "ufw default allow outgoing || true"]
+  - [bash, -lc, "ufw allow OpenSSH || true"]
+  - [bash, -lc, "ufw allow __API_PORT__/tcp || true"]
+  - [bash, -lc, "ufw allow __LLAMA_PORT__/tcp || true"]
+  - [bash, -lc, "ufw --force enable || true"]
+
   # Fetch repo
   - [
       bash,
@@ -40,17 +49,17 @@ runcmd:
       "cd /opt/mindforge-server-llm && docker build --build-arg MODEL_FILE=__MODEL_FILE__ --build-arg MODEL_URL=__MODEL_URL__ -t mindforge-server-llm:cpu .",
     ]
 
-  # Run the server
+  # Run the server (publish both LLM and API ports and provide API port to container)
   - [bash, -lc, "docker rm -f mindforge-server-llm || true"]
   - [
       bash,
       -lc,
-      "docker run -d --name mindforge-server-llm -p 8080:8080 -e CTX=2048 -e N_THREADS=0 -e N_BATCH=256 -e N_PARALLEL=1 --restart unless-stopped mindforge-server-llm:cpu",
+      "docker run -d --name mindforge-server-llm -p __LLAMA_PORT__:8080 -p __API_PORT__:3000 -e PORT=__API_PORT__ -e CTX=2048 -e N_THREADS=0 -e N_BATCH=256 -e N_PARALLEL=1 --restart unless-stopped mindforge-server-llm:cpu",
     ]
 
   # Friendly hint in the console
   - [
       bash,
       -lc,
-      "echo 'LLM server starting on port 8080. Try: curl http://$(curl -s ifconfig.me):8080/v1/chat/completions'",
+      "echo 'LLM server starting on ports __LLAMA_PORT__ (LLM) and __API_PORT__ (API). Try: curl http://$(curl -s ifconfig.me):__LLAMA_PORT__/v1/chat/completions or curl http://$(curl -s ifconfig.me):__API_PORT__/v1/chat/completions'",
     ]

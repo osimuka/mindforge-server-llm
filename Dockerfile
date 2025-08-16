@@ -1,4 +1,4 @@
-FROM --platform=linux/arm64 ghcr.io/ggerganov/llama.cpp:full AS base
+FROM ghcr.io/ggerganov/llama.cpp:full AS base
 
 # Install Python and dependencies
 RUN apt-get update && \
