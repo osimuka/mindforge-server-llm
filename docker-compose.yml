@@ -5,17 +5,18 @@ services:
     container_name: mindforge-server-llm_app
     image: ${IMAGE_NAME:-mindforge-server-llm:cpu}
     build:
-      context: .
+      context: ./rust-server
+      dockerfile: Dockerfile
     volumes:
       - ./prompts:/prompts:ro
       - ./models:/models:ro
     environment:
-      - MODEL_PATH=${MODEL_PATH:-/models/model.gguf}
-      - N_PARALLEL=${N_PARALLEL:-1}
-      - N_THREADS=${N_THREADS:-0}
-      - N_BATCH=${N_BATCH:-256}
-      - CTX=${CTX:-2048}
-      - PORT=3000
+      MODEL_PATH: ${MODEL_PATH:-/models/model.gguf}
+      N_PARALLEL: ${N_PARALLEL:-1}
+      N_THREADS: ${N_THREADS:-0}
+      N_BATCH: ${N_BATCH:-256}
+      CTX: ${CTX:-2048}
+      PORT: "3000"
     networks:
       - llm-net
     expose:
