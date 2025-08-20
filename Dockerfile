@@ -1,45 +1,42 @@
-FROM ghcr.io/ggerganov/llama.cpp:full AS base
+FROM rust:1.75-slim as builder
 
-# Install Python and dependencies
+WORKDIR /app
+COPY rust-server .
+
+# Install build dependencies
 RUN apt-get update && \
-    apt-get install -y python3 python3-pip curl && \
+    apt-get install -y build-essential cmake && \
     rm -rf /var/lib/apt/lists/*
 
-# Copy and install Python requirements
-COPY requirements.txt /app/requirements.txt
-RUN pip3 install -r /app/requirements.txt
+# Build the application
+RUN cargo build --release
 
-# Default model settings (override with build args)
-ARG MODEL_FILE=model.gguf
-ARG MODEL_URL=
+# Create runtime image
+FROM debian:bookworm-slim
 
-# Runtime settings (override with env vars at docker run)
-ENV MODEL_PATH=/models/${MODEL_FILE}
+# Install runtime dependencies
+RUN apt-get update && \
+    apt-get install -y ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy the binary from the builder
+COPY --from=builder /app/target/release/mindforge-server-llm /app/mindforge-server-llm
+
+# Create directories for models and prompts
+RUN mkdir -p /models /prompts
+
+# Runtime settings
+ENV MODEL_PATH=/models/model.gguf
 ENV CTX=2048
-ENV PORT=8080
+ENV PORT=3000
 ENV N_THREADS=0
 ENV N_BATCH=256
 ENV N_PARALLEL=1
 
-# Download model if MODEL_URL is set
-RUN mkdir -p /models && \
-    if [ -n "${MODEL_URL}" ]; then \
-    echo "Downloading ${MODEL_URL}" && \
-    curl -L -o "${MODEL_PATH}" "${MODEL_URL}"; \
-    else \
-    echo "No MODEL_URL provided — mount your model.gguf at /models"; \
-    fi
+# Expose port
+EXPOSE 3000
 
-# Copy application files
-COPY server.py /app/server.py
-COPY entrypoint.sh /app/entrypoint.sh
-COPY ./prompts /prompts
-
-# Setup permissions and working directory
-RUN chmod +x /app/entrypoint.sh
-WORKDIR /app
-
-# Expose port for both llama server and FastAPI
-EXPOSE 8080 3000
-
-ENTRYPOINT ["/app/entrypoint.sh"]
+# Run the application
+CMD ["/app/mindforge-server-llm"]

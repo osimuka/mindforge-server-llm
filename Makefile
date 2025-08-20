@@ -16,24 +16,11 @@ PROMPTS_DIR ?= ./prompts
 # ---- Local build & run ----
 .PHONY: build run stop logs clean
 build:
-	docker build \
-	  --build-arg MODEL_FILE=$(MODEL_FILE) \
-	  --build-arg MODEL_URL=$(MODEL_URL) \
-	  -t $(IMAGE_NAME) .
+	cd rust-server && cargo build --release
+	cp rust-server/target/release/mindforge-server-llm .
 
 run: build
-	docker rm -f $(CONT_NAME) 2>/dev/null || true
-	docker run -d --name $(CONT_NAME) \
-	  -p $(LLAMA_PORT):8080 \
-	  -p $(API_PORT):3000 \
-	  -v $(PROMPTS_DIR):/prompts \
-	  -e PORT=$(API_PORT) \
-	  -e CTX=$(CTX) \
-	  -e N_THREADS=$(N_THREADS) \
-	  -e N_BATCH=$(N_BATCH) \
-	  -e N_PARALLEL=$(N_PARALLEL) \
-	  --restart unless-stopped \
-	  $(IMAGE_NAME)
+	./mindforge-server-llm
 
 stop:
 	docker rm -f $(CONT_NAME) || true
@@ -47,13 +34,13 @@ clean:
 
 .PHONY: compose-up compose-down compose-pull systemd-install
 compose-up:
-    docker compose up --detach --build --remove-orphans
+	docker compose up --detach --build --remove-orphans
 
 compose-down:
-    docker compose down --remove-orphans
+	docker compose down --remove-orphans
 
 compose-pull:
-    docker compose pull
+	docker compose pull
 
 systemd-install:
 	sudo install -d /opt/mindforge-server-llm/deploy

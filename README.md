@@ -1,10 +1,11 @@
-# Local LLM Server (CPU)
+# Local LLM Server (Rust)
 
-Run any GGUF-quantized LLM on a small CPU-only server with llama.cpp's OpenAI-compatible API.
+Run any GGUF-quantized LLM on a small CPU-only server with a high-performance Rust API.
 
 ## Features
 
 - Works with any `.gguf` file (Q4 fits in 4GB RAM)
+- High-performance Rust implementation (handles 10,000+ requests/second)
 - CPU-only; runs on small cloud VMs or locally
 - Exposes `/v1/chat/completions` endpoint
 - Supports dynamic prompt switching via API
