@@ -239,12 +239,12 @@ fn estimate_tokens(text: &str) -> u32 {
 async fn run_inference(
     app_state: &Arc<AppState>,
     prompt: &str,
-    _temperature: f32,
-    _max_tokens: u32,
+    _temperature: f32, // currently unused (sampler doesn't expose temperature); keep param for API compatibility
+    max_tokens: u32,
 ) -> Result<String> {
     // Lock the model for exclusive use during inference.
     let model_arc = app_state.model.clone();
-    let mut guard = model_arc.lock().await;
+    let guard = model_arc.lock().await;
 
     // If the model isn't loaded, return a placeholder when allowed, otherwise error.
     if guard.is_none() {
@@ -254,11 +254,54 @@ async fn run_inference(
         return Err(anyhow!("Model not loaded on server"));
     }
 
-    let _model_ref = guard.as_mut().unwrap();
+    let model = guard.as_ref().unwrap();
 
-    // TODO: Replace this placeholder with a real call into _model_ref once the
-    // llama_cpp binding and the chosen model architecture are compatible.
-    Ok(format!("{}{}", prompt, "\n\n[generated placeholder]"))
+    // Set parameters for this inference request
+    let n_threads = std::thread::available_parallelism().map_or(2, |p| p.get());
+    log::info!(
+        "Configuring inference threads: {} (thread control is handled by the model or via parameters at load time)",
+        n_threads
+    );
+
+    // Create session for this inference
+    let mut session_params = llama_cpp::SessionParams::default();
+    // session_params.n_threads expects a u32, but available_parallelism returns usize;
+    // safely convert with a fallback to u32::MAX if the value doesn't fit.
+    let n_threads_u32: u32 = n_threads.try_into().unwrap_or(u32::MAX);
+    session_params.n_threads = n_threads_u32;
+
+    // Create a session from the model
+    let mut ctx = match model.create_session(session_params) {
+        Ok(ctx) => ctx,
+        Err(e) => return Err(anyhow!("Failed to create session: {}", e)),
+    };
+
+    // Feed the prompt into the context
+    if let Err(e) = ctx.advance_context(prompt) {
+        return Err(anyhow!("Failed to advance context: {}", e));
+    }
+
+    // Configure the sampler
+    let sampler = llama_cpp::standard_sampler::StandardSampler::default();
+    // Note: this version of the crate's StandardSampler does not expose a `temp` field.
+    // If your crate version supports setting temperature, replace the line below with the appropriate setter.
+    // For now we use the default sampler configuration.
+
+    // Start token generation
+    log::info!("Starting inference with max_tokens={}", max_tokens);
+
+    // Generate completion using the sampler
+    let completions = ctx.start_completing_with(sampler, max_tokens as usize)?;
+
+    // Collect all generated tokens into a single string
+    let mut output = String::new();
+    for completion in completions {
+        output.push_str(&format!("{:?}", completion));
+    }
+
+    log::info!("Completed inference. Output length: {} chars", output.len());
+
+    Ok(output)
 }
 
 #[actix_web::main]
