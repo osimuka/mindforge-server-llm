@@ -3,11 +3,16 @@ FROM ghcr.io/ggerganov/llama.cpp:full AS base
 # Install Python and dependencies
 RUN apt-get update && \
     apt-get install -y python3 python3-pip curl && \
+    apt-get clean && \
     rm -rf /var/lib/apt/lists/*
+
+# Use multi-stage build to optimize the final image
+WORKDIR /app
 
 # Copy and install Python requirements
 COPY requirements.txt /app/requirements.txt
-RUN pip3 install -r /app/requirements.txt
+RUN pip3 install --no-cache-dir -r /app/requirements.txt && \
+    pip3 install --no-cache-dir "uvloop>=0.14.0" "httptools>=0.1.1"
 
 # Default model settings (override with build args)
 ARG MODEL_FILE=model.gguf

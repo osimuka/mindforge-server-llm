@@ -1,6 +1,11 @@
-# ...existing code...
-fastapi==0.68.0
-uvicorn==0.15.0
-pydantic==1.8.2
-python-multipart==0.0.5
-httpx==0.23.3
+# Core dependencies
+fastapi==0.103.1
+uvicorn[standard]==0.23.2
+pydantic==2.3.0
+python-multipart==0.0.6
+httpx==0.25.0
+
+# Performance and monitoring
+prometheus-fastapi-instrumentator==6.1.0
+ujson==5.8.0
+orjson==3.9.7
