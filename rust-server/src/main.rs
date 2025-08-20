@@ -63,6 +63,7 @@ struct Usage {
 struct AppState {
     model: Arc<Mutex<Option<LlamaModel>>>,
     inference_semaphore: Semaphore,
+    allow_placeholder: bool,
 }
 
 fn read_prompt_file(prompt_name: &str) -> Result<String> {
@@ -154,9 +155,20 @@ async fn generate(
     }
 
     let formatted_prompt = format_messages_for_llama(&messages);
+    // If model is not loaded and placeholders are not allowed, return 503 early with a clear message.
+    {
+        let guard = state.model.lock().await;
+        if guard.is_none() && !state.allow_placeholder {
+            log::warn!("Inference requested but model is not loaded");
+            return HttpResponse::ServiceUnavailable().json(serde_json::json!({
+                "error": "Model not loaded on server. Check server logs for model load errors or set ALLOW_PLACEHOLDER=true to enable fallback responses for development."
+            }));
+        }
+    }
+
     // Run inference through helper (centralizes LlamaParams and error handling)
     let result = match run_inference(
-        &state.model,
+        state.get_ref(),
         &formatted_prompt,
         request.temperature,
         request.max_tokens,
@@ -223,24 +235,29 @@ fn estimate_tokens(text: &str) -> u32 {
 }
 
 // Centralized inference helper so LlamaParams are set in one place.
-// Accept the same model type stored in AppState (Arc<Mutex<Option<LlamaModel>>>).
+// Accept the application state so we can access the model and configuration.
 async fn run_inference(
-    model: &Arc<Mutex<Option<LlamaModel>>>,
+    app_state: &Arc<AppState>,
     prompt: &str,
     _temperature: f32,
     _max_tokens: u32,
 ) -> Result<String> {
     // Lock the model for exclusive use during inference.
-    let mut guard = model.lock().await;
+    let model_arc = app_state.model.clone();
+    let mut guard = model_arc.lock().await;
 
-    let _model_ref = match guard.as_mut() {
-        Some(m) => m,
-        None => return Err(anyhow!("Model not loaded on server")),
-    };
+    // If the model isn't loaded, return a placeholder when allowed, otherwise error.
+    if guard.is_none() {
+        if app_state.allow_placeholder {
+            return Ok(format!("{}{}", prompt, "\n\n[generated placeholder]"));
+        }
+        return Err(anyhow!("Model not loaded on server"));
+    }
 
-    // Placeholder generation: return the prompt appended with a simple suffix.
-    // Replace this with model_ref.evaluate(...) or model_ref.generate(...) once the
-    // llama_cpp binding and model architecture are compatible.
+    let _model_ref = guard.as_mut().unwrap();
+
+    // TODO: Replace this placeholder with a real call into _model_ref once the
+    // llama_cpp binding and the chosen model architecture are compatible.
     Ok(format!("{}{}", prompt, "\n\n[generated placeholder]"))
 }
 
@@ -274,9 +291,14 @@ async fn main() -> std::io::Result<()> {
 
     // Create application state
     let model = Arc::new(Mutex::new(loaded_model));
+    let allow_placeholder = env::var("ALLOW_PLACEHOLDER")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+
     let state = Arc::new(AppState {
         model: model.clone(),
         inference_semaphore: Semaphore::new(n_parallel * MAX_CONCURRENT_INFERENCES),
+        allow_placeholder,
     });
 
     // Start HTTP server
