@@ -1,5 +1,5 @@
 # Builder stage: use official Rust image and cache dependencies
-FROM rust:latest as builder
+FROM rust:1.82-slim as builder
 
 # Install build dependencies (include clang/libclang for bindgen)
 RUN apt-get update && \
@@ -28,12 +28,13 @@ RUN mkdir -p src && \
 # Copy the real source tree and build final release
 COPY src ./src
 
-# Ensure stale prebuilt deps for this binary are removed
-RUN rm -f ./target/release/deps/mindforge-llm-server* || true
+# Ensure any stale build artifacts are removed so the real source rebuilds
+RUN rm -rf ./target || true
 
 RUN cargo build --release
 
 # Runtime stage
+
 FROM debian:bookworm-slim
 
 # Runtime dependencies
@@ -51,7 +52,7 @@ COPY --from=builder /app/target/release/mindforge-llm-server /usr/local/bin/
 
 ENV RUST_LOG=info
 ENV PORT=3000
-ENV MODEL_PATH=/models/model.gguf
+ENV MODEL_PATH=/models/Phi-3-mini-4k-instruct-Q4_K_S.gguf
 ENV CTX=2048
 ENV N_THREADS=0
 ENV N_BATCH=256

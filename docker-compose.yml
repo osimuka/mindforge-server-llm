@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   app:
     container_name: mindforge-server-llm_app
@@ -11,7 +9,7 @@ services:
       - ./prompts:/prompts:ro
       - ./models:/models:ro
     environment:
-      MODEL_PATH: ${MODEL_PATH:-/models/model.gguf}
+      MODEL_PATH: ${MODEL_PATH:-/models/Phi-3-mini-4k-instruct-Q4_K_S.gguf}
       N_PARALLEL: ${N_PARALLEL:-1}
       N_THREADS: ${N_THREADS:-0}
       N_BATCH: ${N_BATCH:-256}
@@ -19,9 +17,21 @@ services:
       PORT: "3000"
     networks:
       - llm-net
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
     restart: unless-stopped
+  model-downloader:
+    image: p3terx/aria2-pro:latest
+    container_name: mindforge-server-llm_model_downloader
+    volumes:
+      - ./models:/models
+    environment:
+      MODEL_FILE: ${MODEL_FILE:-Phi-3-mini-4k-instruct-Q4_K_S.gguf}
+      MODEL_URL: ${MODEL_URL:-https://huggingface.co/bartowski/Phi-3-mini-4k-instruct-GGUF/resolve/main/${MODEL_FILE}}
+    entrypoint: [ "sh", "-c" ]
+    command: >
+      '[ -f /models/"$$MODEL_FILE" ] && echo "model exists: /models/$${MODEL_FILE}" || (mkdir -p /models && aria2c -c -x 16 -s 16 -k 1M -d /models -o "$$MODEL_FILE" "$$MODEL_URL")'
+    restart: "no"
 
   caddy:
     container_name: mindforge-server-llm_caddy

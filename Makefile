@@ -55,7 +55,7 @@ clean:
 
 .PHONY: compose-up compose-down compose-pull systemd-install
 compose-up:
-	docker compose up --detach --build --remove-orphans
+	docker compose up --no-deps --build model-downloader
 
 compose-down:
 	docker compose down --remove-orphans

@@ -61,7 +61,7 @@ struct Usage {
 }
 
 struct AppState {
-    model: Arc<Mutex<LlamaModel>>,
+    model: Arc<Mutex<Option<LlamaModel>>>,
     inference_semaphore: Semaphore,
 }
 
@@ -223,20 +223,24 @@ fn estimate_tokens(text: &str) -> u32 {
 }
 
 // Centralized inference helper so LlamaParams are set in one place.
-// Accept the same model type stored in AppState (Arc<Mutex<LlamaModel>>).
+// Accept the same model type stored in AppState (Arc<Mutex<Option<LlamaModel>>>).
 async fn run_inference(
-    model: &Arc<Mutex<LlamaModel>>,
+    model: &Arc<Mutex<Option<LlamaModel>>>,
     prompt: &str,
     _temperature: f32,
     _max_tokens: u32,
 ) -> Result<String> {
     // Lock the model for exclusive use during inference.
-    // Depending on the llama_cpp API available to you, replace the placeholder
-    // below with the actual generation/evaluation call.
-    let _guard = model.lock().await;
+    let mut guard = model.lock().await;
+
+    let _model_ref = match guard.as_mut() {
+        Some(m) => m,
+        None => return Err(anyhow!("Model not loaded on server")),
+    };
 
     // Placeholder generation: return the prompt appended with a simple suffix.
-    // Replace this with model.evaluate(...) or model.generate(...) if your binding supports it.
+    // Replace this with model_ref.evaluate(...) or model_ref.generate(...) once the
+    // llama_cpp binding and model architecture are compatible.
     Ok(format!("{}{}", prompt, "\n\n[generated placeholder]"))
 }
 
@@ -245,7 +249,8 @@ async fn main() -> std::io::Result<()> {
     env_logger::init_from_env(env_logger::Env::default().default_filter_or("info"));
     dotenv::dotenv().ok();
 
-    let model_path = env::var("MODEL_PATH").unwrap_or_else(|_| "/models/model.gguf".to_string());
+    let model_path = env::var("MODEL_PATH")
+        .unwrap_or_else(|_| "/models/Phi-3-mini-4k-instruct-Q4_K_S.gguf".to_string());
     let port = env::var("PORT")
         .unwrap_or_else(|_| "3000".to_string())
         .parse::<u16>()
@@ -255,13 +260,20 @@ async fn main() -> std::io::Result<()> {
         .parse::<usize>()
         .unwrap_or(1);
 
-    // Load model (wrapped in an async Mutex so we can obtain mutable access for evaluation)
-    let model = Arc::new(Mutex::new(
-        LlamaModel::load_from_file(&model_path, LlamaParams::default())
-            .expect("Failed to load LLM model"),
-    ));
+    // Try to load model (wrapped in an async Mutex so we can obtain mutable access for evaluation)
+    let loaded_model = match LlamaModel::load_from_file(&model_path, LlamaParams::default()) {
+        Ok(m) => {
+            log::info!("Model loaded successfully from {}", model_path);
+            Some(m)
+        }
+        Err(e) => {
+            log::error!("Failed to load LLM model: {}", e);
+            None
+        }
+    };
 
     // Create application state
+    let model = Arc::new(Mutex::new(loaded_model));
     let state = Arc::new(AppState {
         model: model.clone(),
         inference_semaphore: Semaphore::new(n_parallel * MAX_CONCURRENT_INFERENCES),
