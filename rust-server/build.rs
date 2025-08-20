@@ -1,9 +1,8 @@
 use std::env;
-use std::path::Path;
 
 fn main() {
     // Only build llama.cpp if the feature is enabled
-    if cfg!() {
+    if cfg!(feature = "llama_cpp") {
         // Set build settings for llama.cpp
         println!(
             "cargo:rustc-link-search=native={}/llama.cpp",

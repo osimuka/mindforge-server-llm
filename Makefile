@@ -17,10 +17,31 @@ PROMPTS_DIR ?= ./prompts
 .PHONY: build run stop logs clean
 build:
 	cd rust-server && cargo build --release
-	cp rust-server/target/release/mindforge-server-llm .
+	cp rust-server/target/release/mindforge-llm-server .
 
 run: build
-	./mindforge-server-llm
+	./mindforge-llm-server
+
+# Download a GGUF model into ./models (uses MODEL_FILE & MODEL_URL from top of file)
+.PHONY: download-model install-model download-and-run
+download-model:
+	@echo "Downloading model: $(MODEL_FILE)"
+	@mkdir -p $(CURDIR)/models
+	@if [ -z "$(MODEL_FILE)" ]; then \
+		echo "MODEL_FILE is not set"; exit 1; \
+	fi
+	@curl -L --fail -o $(CURDIR)/models/$(MODEL_FILE) "$(MODEL_URL)"
+
+# Install the downloaded model to the system default /models/model.gguf (requires sudo)
+install-model: download-model
+	@echo "Installing model to /models/model.gguf (requires sudo)"
+	sudo mkdir -p /models
+	sudo cp $(CURDIR)/models/$(MODEL_FILE) /models/model.gguf
+
+# Build, download model, and run the server with MODEL_PATH pointed to the downloaded file
+download-and-run: build download-model
+	@echo "Running server with MODEL_PATH=$(CURDIR)/models/$(MODEL_FILE)"
+	MODEL_PATH=$(CURDIR)/models/$(MODEL_FILE) ./mindforge-llm-server
 
 stop:
 	docker rm -f $(CONT_NAME) || true
